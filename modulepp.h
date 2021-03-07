@@ -72,13 +72,13 @@ public:
     template<typename T> static T* load(const std::string& path, bool verbose=false) {
         void* h = dlopen(path.c_str(), RTLD_LAZY);
         if(!h) {
-            if(verbose) std::cout << "dlopen error: " << dlerror() << std::endl;
+            if(verbose) printf("dlopen error: %s", dlerror());
             return nullptr;
         }
         auto* c = (create_t*) dlsym(h, "create");
         auto e = dlerror();
         if(e) {
-            if(verbose) std::cout << "dlsym error:" << e << std::endl;
+            if(verbose) printf("dlsym error: %s", e);
             dlclose(h);
             return nullptr;
         }
