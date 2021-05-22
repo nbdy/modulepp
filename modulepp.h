@@ -31,8 +31,10 @@ SOFTWARE.
 #include <map>
 #include <string>
 #include <thread>
+#include <vector>
 #include <fcntl.h>
 #include <dlfcn.h>
+#include <filesystem>
 
 #define F_CREATE(T) extern "C" Module* create() {return dynamic_cast<T*>(new T);}
 
@@ -87,9 +89,9 @@ public:
     Module(): IModule(){};
 };
 
-typedef Module* pModule;
+using pModule = Module*;
 typedef pModule create_t();
-
+using tModuleVector = std::vector<pModule>;
 
 class [[maybe_unused]] ModuleLoader {
 public:
@@ -117,6 +119,24 @@ public:
     }
 
     /*!
+     * load all shared objects in a directory
+     * @tparam T
+     * @param path std::string
+     * @param verbose bool
+     * @return std::vector<T*>
+     */
+    template<typename T> static std::vector<T*> loadDirectory(const std::string& path, bool verbose=false) {
+        std::vector<T*> r;
+        for(const auto& e : std::filesystem::directory_iterator(path)) {
+            const auto& p = e.path();
+            if(e.is_regular_file() && p.has_extension() && p.extension() == ".so") {
+                r.push_back(load<T>(p, verbose));
+            }
+        }
+        return r;
+    }
+
+    /*!
      * load a module from a path, returns a Module pointer
      * @param path std::string, path to shared object
      * @param verbose bool, show errors
@@ -124,6 +144,16 @@ public:
      */
     static pModule load(const std::string& path, bool verbose=false) {
         return load<Module>(path, verbose);
+    }
+
+    /*!
+     * load all shared objects from a path
+     * @param path
+     * @param verbose
+     * @return
+     */
+    static tModuleVector loadDirectory(const std::string& path, bool verbose=false) {
+        return loadDirectory<Module>(path, verbose);
     }
 };
 

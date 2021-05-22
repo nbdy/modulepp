@@ -1,6 +1,8 @@
 # modulepp
 ## features
 - [X] shared object loading
+  - [X] load single shared object
+  - [X] load whole directory of shared objects
 - [X] module interface / baseline
 ## example
 `look at tests/test.cpp and tests/TestModule.cpp`
