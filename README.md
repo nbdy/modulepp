@@ -13,8 +13,8 @@ class TestModule : public Module {
 public:
     TestModule() = default;
 
-void work() override {
-    std::cout << "TestModule" << std::endl;
+    void work() override {
+        std::cout << "TestModule" << std::endl;
         this->stop();
     }
 };

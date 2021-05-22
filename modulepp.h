@@ -1,3 +1,29 @@
+/*
+
+MIT License
+
+Copyright (c) 2021 Pascal Eberlein
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+*/
+
 #ifndef LIBMODULEPP_MODULEPP_H
 #define LIBMODULEPP_MODULEPP_H
 
@@ -14,7 +40,6 @@
 class IModule {
 protected:
     bool doRun = true;
-
     bool error = false;
     std::string errorString;
 
@@ -22,32 +47,37 @@ public:
     IModule() = default;
     ~IModule() = default;
 
-    void start() {
+    [[maybe_unused]] void start() {
         std::thread t([this](){
             run();
         });
-        t.detach();
     }
 
-    void run() {
-        while(doRun) work();
+    virtual void run() {
+        onStart();
+        while(doRun) {
+            work();
+        }
+        onStop();
     }
 
     virtual void work() {}
+    virtual void onStart() {}
+    virtual void onStop() {}
 
-    virtual void stop() {
+    [[maybe_unused]] virtual void stop() {
         doRun = false;
     }
 
-    bool hasError() const {
+    [[maybe_unused]] [[nodiscard]] bool hasError() const {
         return error;
     }
 
-    std::string getErrorString() const {
+    [[maybe_unused]] [[nodiscard]] std::string getErrorString() const {
         return errorString;
     }
 
-    bool isRunning() const {
+    [[maybe_unused]] [[nodiscard]] bool isRunning() const {
         return doRun;
     }
 };
@@ -60,7 +90,8 @@ public:
 typedef Module* pModule;
 typedef pModule create_t();
 
-class ModuleLoader {
+
+class [[maybe_unused]] ModuleLoader {
 public:
     /*!
      * path should be the absolute path to the file
@@ -85,11 +116,15 @@ public:
         return c();
     }
 
+    /*!
+     * load a module from a path, returns a Module pointer
+     * @param path std::string, path to shared object
+     * @param verbose bool, show errors
+     * @return Module*
+     */
     static pModule load(const std::string& path, bool verbose=false) {
         return load<Module>(path, verbose);
     }
 };
-
-
 
 #endif //LIBMODULEPP_MODULEPP_H
