@@ -4,7 +4,7 @@
 
 #include "TestModule.h"
 
-TestModule::TestModule(): IModule("TestModule") {}
+TestModule::TestModule() : IModule("TestModule") {}
 
 void TestModule::work() {
   m_u32Counter += 1;

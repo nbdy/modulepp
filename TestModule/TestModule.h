@@ -16,7 +16,7 @@ class TestModule : public IModule {
 
   void work() override;
 
-  [[nodiscard]] uint32_t getCounter() const{
+  [[nodiscard]] uint32_t getCounter() const {
     return m_u32Counter;
   };
 };

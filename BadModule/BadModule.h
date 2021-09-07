@@ -7,7 +7,7 @@
 
 #include "../modulepp.h"
 
-class BadModule: public IModule {
+class BadModule : public IModule {
  public:
   BadModule();
 };
