@@ -1,4 +1,5 @@
 # modulepp
+[![CodeFactor](https://www.codefactor.io/repository/github/nbdy/modulepp/badge/master)](https://www.codefactor.io/repository/github/nbdy/modulepp/overview/master)
 ## features
 - [X] shared object loading
   - [X] load single shared object
