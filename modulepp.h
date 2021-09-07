@@ -31,130 +31,158 @@ SOFTWARE.
 #include <map>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
+#include <chrono>
 #include <fcntl.h>
 #include <dlfcn.h>
 #include <filesystem>
 
-#define F_CREATE(T) extern "C" Module* create() {return dynamic_cast<T*>(new T);}
-
+#define F_CREATE(T) extern "C" T* create() {return new T;}
 
 class IModule {
-protected:
-    bool doRun = true;
-    bool error = false;
-    std::string errorString;
+ protected:
+  uint32_t m_u32CycleTime_ms;
+  bool m_bRun;
+  std::string m_sError;
+  std::thread* m_pThread;
+  std::string m_sName = "IModule";
 
-public:
-    IModule() = default;
-    ~IModule() = default;
+ public:
+  IModule(): m_u32CycleTime_ms(500), m_bRun(true), m_sError(), m_pThread(nullptr) {}
+  explicit IModule(std::string i_sName): m_u32CycleTime_ms(500), m_bRun(true), m_sError(), m_pThread(nullptr), m_sName(std::move(i_sName)) {}
 
-    [[maybe_unused]] void start() {
-        std::thread t([this](){
-            run();
-        });
+  ~IModule() {
+    delete m_pThread;
+  };
+
+  bool start() {
+    if (m_pThread != nullptr) {
+      return false;
     }
+    m_pThread = new std::thread([this]() {
+      run();
+    });
+    return true;
+  }
 
-    virtual void run() {
-        onStart();
-        while(doRun) {
-            work();
-        }
-        onStop();
+  bool join() {
+    if (m_pThread == nullptr) {
+      return false;
     }
+    m_pThread->join();
+    return true;
+  }
 
-    virtual void work() {}
-    virtual void onStart() {}
-    virtual void onStop() {}
-
-    [[maybe_unused]] virtual void stop() {
-        doRun = false;
+  virtual void run() {
+    onStart();
+    while (m_bRun) {
+      work();
+      std::this_thread::sleep_for(std::chrono::milliseconds(m_u32CycleTime_ms));
     }
+    onStop();
+  }
 
-    [[maybe_unused]] [[nodiscard]] bool hasError() const {
-        return error;
-    }
+  virtual void work() {}
+  virtual void onStart() {}
+  virtual void onStop() {}
 
-    [[maybe_unused]] [[nodiscard]] std::string getErrorString() const {
-        return errorString;
+  virtual bool stop() {
+    if (m_pThread == nullptr) {
+      return false;
     }
+    m_bRun = false;
+    return true;
+  }
 
-    [[maybe_unused]] [[nodiscard]] bool isRunning() const {
-        return doRun;
-    }
+  [[nodiscard]] bool hasError() const {
+    return !m_sError.empty();
+  }
+
+  [[nodiscard]] std::string getError() const {
+    return m_sError;
+  }
+
+  [[nodiscard]] bool isRunning() const {
+    return m_bRun;
+  }
+
+  [[nodiscard]] uint32_t getCycleTime() const {
+    return m_u32CycleTime_ms;
+  }
+
+  void setCycleTime(uint32_t i_u32CycleTime) {
+    m_u32CycleTime_ms = i_u32CycleTime;
+  }
+
+  std::string getName() {
+    return m_sName;
+  }
 };
 
-class Module : public IModule {
-public:
-    Module(): IModule(){};
-};
+class ModuleLoader {
+ public:
+  /*!
+   * path should be the absolute path to the file
+   * @tparam T
+   * @param path
+   * @param verbose
+   * @return
+   */
+  template<typename T>
+  static T* load(const std::string& path, bool verbose = false) {
+    void* h = dlopen(std::filesystem::absolute(path).c_str(), RTLD_LAZY);
+    if (!h) {
+      if (verbose) {
+        printf("dlopen error: %s\n", dlerror());
+      }
+      return nullptr;
+    }
+    typedef T* create_t();
+    auto* c = (create_t*) dlsym(h, "create");
+    auto e = dlerror();
+    if (e) {
+      if (verbose) {
+        printf("dlsym error: %s\n", e);
+      }
+      dlclose(h);
+      return nullptr;
+    }
+    return c();
+  }
 
-using pModule = Module*;
-typedef pModule create_t();
-using tModuleVector = std::vector<pModule>;
-
-class [[maybe_unused]] ModuleLoader {
-public:
-    /*!
-     * path should be the absolute path to the file
-     * @tparam T
-     * @param path
-     * @param verbose
-     * @return
-     */
-    template<typename T> static T* load(const std::string& path, bool verbose=false) {
-        void* h = dlopen(path.c_str(), RTLD_LAZY);
-        if(!h) {
-            if(verbose) printf("dlopen error: %s\n", dlerror());
-            return nullptr;
+  /*!
+   * load all shared objects in a directory
+   * @tparam T
+   * @param path std::string
+   * @param verbose bool
+   * @return std::vector<T*>
+   */
+  template<typename T>
+  static std::vector<T*> loadDirectory(const std::string& path, bool verbose = false) {
+    std::vector<T*> r;
+    for (const auto& e: std::filesystem::directory_iterator(path)) {
+      const auto& p = e.path();
+      if (e.is_regular_file() && p.has_extension() && p.extension() == ".so") {
+        auto *ptr = load<T>(p, verbose);
+        if(ptr != nullptr) {
+          r.push_back(ptr);
         }
-        auto* c = (create_t*) dlsym(h, "create");
-        auto e = dlerror();
-        if(e) {
-            if(verbose) printf("dlsym error: %s\n", e);
-            dlclose(h);
-            return nullptr;
-        }
-        return c();
+      }
     }
+    return r;
+  }
 
-    /*!
-     * load all shared objects in a directory
-     * @tparam T
-     * @param path std::string
-     * @param verbose bool
-     * @return std::vector<T*>
-     */
-    template<typename T> static std::vector<T*> loadDirectory(const std::string& path, bool verbose=false) {
-        std::vector<T*> r;
-        for(const auto& e : std::filesystem::directory_iterator(path)) {
-            const auto& p = e.path();
-            if(e.is_regular_file() && p.has_extension() && p.extension() == ".so") {
-                r.push_back(load<T>(p, verbose));
-            }
-        }
-        return r;
-    }
-
-    /*!
-     * load a module from a path, returns a Module pointer
-     * @param path std::string, path to shared object
-     * @param verbose bool, show errors
-     * @return Module*
-     */
-    static pModule load(const std::string& path, bool verbose=false) {
-        return load<Module>(path, verbose);
-    }
-
-    /*!
-     * load all shared objects from a path
-     * @param path
-     * @param verbose
-     * @return
-     */
-    static tModuleVector loadDirectory(const std::string& path, bool verbose=false) {
-        return loadDirectory<Module>(path, verbose);
-    }
+  /*!
+   * load a module from a path, returns a Module pointer
+   * @param path std::string, path to shared object
+   * @param verbose bool, show errors
+   * @return Module*
+   */
+  template<typename ModuleType>
+  static ModuleType* loadModule(const std::string& path, bool verbose = false) {
+    return load<ModuleType>(path, verbose);
+  }
 };
 
 #endif //LIBMODULEPP_MODULEPP_H

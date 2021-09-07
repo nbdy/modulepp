@@ -4,29 +4,49 @@
   - [X] load single shared object
   - [X] load whole directory of shared objects
 - [X] module interface / baseline
+
+- [X] test code coverage is 97%
 ## example
 `look at tests/test.cpp and tests/TestModule.cpp`
 ```c++
-// TestModule.cpp
-#include <iostream>
-#include "../modulepp.h"
+// TestModule.h
+#ifndef MODULEPP_TESTMODULE_TESTMODULE_H_
+#define MODULEPP_TESTMODULE_TESTMODULE_H_
 
-class TestModule : public Module {
-public:
-    TestModule() = default;
+#include "modulepp.h"
 
-    void work() override {
-        std::cout << "TestModule" << std::endl;
-        this->stop();
-    }
+class TestModule : public IModule {
+  private:
+    uint32_t m_u32Counter = 0;
+
+  public:
+    TestModule();
+
+    void work() override;
+  
+    [[nodiscard]] uint32_t getCounter() const{
+      return m_u32Counter;
+    };
 };
 
-F_CREATE(TestModule);
+#endif //MODULEPP_TESTMODULE_TESTMODULE_H_
+```
+```c++
+// TestModule.cpp
+#include "TestModule.h"
+
+TestModule::TestModule(): IModule("TestModule") {}
+
+void TestModule::work() {
+  m_u32Counter += 1;
+}
+
+F_CREATE(TestModule)
 ```
 ```c++
 // main.cpp
 #include <iostream>
-#include "../modulepp.h"
+#include "modulepp.h"
 
 int main(int argc, char** argv) {
     std::string so = "/home/nbdy/CLionProjects/libmodulepp/cmake-build-debug/libtest_module.so";
@@ -34,7 +54,7 @@ int main(int argc, char** argv) {
     auto* m = ModuleLoader::load(so, true);
     if(m == nullptr) std::cout << "could not load library" << std::endl;
     else m->start();
-    while(m->isRunning()) {}
+    m.join();
     return 0;
 }
 ```
