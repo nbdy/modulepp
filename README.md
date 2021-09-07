@@ -7,7 +7,6 @@
 
 - [X] test code coverage is 97%
 ## example
-`look at tests/test.cpp and tests/TestModule.cpp`
 ```c++
 // TestModule.h
 #ifndef MODULEPP_TESTMODULE_TESTMODULE_H_
