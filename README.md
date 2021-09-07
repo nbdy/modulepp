@@ -6,7 +6,7 @@
   - [X] load whole directory of shared objects
 - [X] module interface / baseline
 
-- [X] test code coverage is 97%
+- [X] 100% test coverage
 ## example
 ```c++
 // TestModule.h
