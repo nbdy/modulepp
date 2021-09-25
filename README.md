@@ -1,13 +1,18 @@
 # modulepp
-[![CodeFactor](https://www.codefactor.io/repository/github/nbdy/modulepp/badge/master)](https://www.codefactor.io/repository/github/nbdy/modulepp/overview/master)
-## features
-- [X] shared object loading
-  - [X] load single shared object
-  - [X] load whole directory of shared objects
-- [X] module interface / baseline
 
-- [X] 100% test coverage
+[![CodeFactor](https://www.codefactor.io/repository/github/nbdy/modulepp/badge/master)](https://www.codefactor.io/repository/github/nbdy/modulepp/overview/master)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/5de2c7b86ba74cd48d3f83777b100ded)](https://www.codacy.com/gh/nbdy/modulepp/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=nbdy/modulepp&amp;utm_campaign=Badge_Grade)
+
+## features
+  - [X] shared object loading
+    - [X] load single shared object
+    - [X] load whole directory of shared objects
+  - [X] module interface / baseline
+
+  - [X] 100% test coverage
+
 ## example
+
 ```c++
 // TestModule.h
 #ifndef MODULEPP_TESTMODULE_TESTMODULE_H_
@@ -31,6 +36,7 @@ class TestModule : public IModule {
 
 #endif //MODULEPP_TESTMODULE_TESTMODULE_H_
 ```
+
 ```c++
 // TestModule.cpp
 #include "TestModule.h"
@@ -43,6 +49,7 @@ void TestModule::work() {
 
 F_CREATE(TestModule)
 ```
+
 ```c++
 // main.cpp
 #include <iostream>
