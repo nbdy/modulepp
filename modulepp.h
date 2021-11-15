@@ -272,7 +272,7 @@ class ModuleLoader {
   template<typename T>
   static std::vector<T*> loadDirectoryRecursive(const Path& path, bool verbose = false) {
     std::vector<T*> r;
-    for (const auto& e: std::filesystem::directory_iterator(path)) {
+    for (const auto& e: std::filesystem::recursive_directory_iterator(path)) {
       const auto& p = e.path();
       auto *ptr = load<T>(p, verbose);
       if(ptr != nullptr) {
