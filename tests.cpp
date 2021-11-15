@@ -15,19 +15,20 @@ TEST(modulepp, LoadTestLibrary) {
   EXPECT_TRUE(std::filesystem::exists(TEST_LIBRARY_PATH));
   auto* m = ModuleLoader::loadModule<TestModule>(TEST_LIBRARY_PATH, true);
   EXPECT_NE(m, nullptr); // could the module be loaded?
-  EXPECT_TRUE(m->start()); // could the module thread get started?
+  EXPECT_TRUE(m->start());
+  EXPECT_TRUE(m->isRunning()); // was the module started?
   EXPECT_FALSE(m->start()); // check that we cannot start the module again
   EXPECT_EQ(m->getCycleTime(), 500); // is the cycle time 500 (the default)?
-  m->setCycleTime(800); // set a new cycle time
+  m->setCycleTime(800U); // set a new cycle time
   EXPECT_EQ(m->getCycleTime(), 800); // is the cycle time 800 now?
-  std::this_thread::sleep_for(std::chrono::milliseconds(1000)); // sleep for a bit
+  std::this_thread::sleep_for(std::chrono::milliseconds(1600)); // sleep for a bit
   EXPECT_TRUE(m->isRunning()); // check if we are still running
-  EXPECT_TRUE(m->stop()); // check if stopping works
-  EXPECT_FALSE(m->isRunning()); // check that we are not running anymore
+  m->stop(); // check if stopping works
+  EXPECT_FALSE(m->isEnabled()); // check that we are not running anymore
   EXPECT_FALSE(m->hasError()); // we should not have any errors
   EXPECT_EQ(m->getError(), ""); // the error string should also be empty
   EXPECT_EQ(m->getCounter(), 2);
-  EXPECT_EQ(m->getName(), "TestModule");
+  EXPECT_EQ(m->getInformation().getName(), "TestModule");
 }
 
 TEST(modulepp, LoadNotExistentLibrary) {
@@ -43,9 +44,16 @@ TEST(modulepp, LoadBadModule) {
 }
 
 TEST(modulepp, LoadDirectory) {
-  auto modules = ModuleLoader::loadDirectory<TestModule>(std::filesystem::current_path(), true);
+  auto cwd = std::filesystem::current_path();
+  std::cout << cwd << std::endl;
+  auto modules = ModuleLoader::loadDirectory<TestModule>(cwd, true);
+/*
   for(auto module : modules) {
-    std::cout << module->getName() << std::endl;
+    if(module != nullptr) {
+      std::cout << module->getInformation().getName() << std::endl;
+    }
   }
+  */
   EXPECT_EQ(modules.size(), 1);
+  EXPECT_EQ(modules[0]->getInformation().getName(), "TestModule");
 }

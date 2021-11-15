@@ -3,11 +3,13 @@
 //
 
 #include "TestModule.h"
+#include <iostream>
 
-TestModule::TestModule() : IModule("TestModule") {}
+TestModule::TestModule() : IModule(ModuleInformation {"TestModule"}) {}
 
 void TestModule::work() {
-  m_u32Counter += 1;
+  std::cout << "aye" << std::endl;
+  m_u32Counter += 1U;
 }
 
 F_CREATE(TestModule)

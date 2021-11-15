@@ -4,6 +4,6 @@
 
 #include "BadModule.h"
 
-BadModule::BadModule() : IModule("BaseModule") {}
+BadModule::BadModule() : IModule(ModuleInformation {"BaseModule"}) {}
 
 extern "C" BadModule* wrongExportFunctionName() { return new BadModule; }

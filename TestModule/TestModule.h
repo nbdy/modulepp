@@ -9,7 +9,7 @@
 
 class TestModule : public IModule {
  private:
-  uint32_t m_u32Counter = 0;
+  uint32_t m_u32Counter = 0U;
 
  public:
   TestModule();

@@ -28,7 +28,9 @@ SOFTWARE.
 #define LIBMODULEPP_MODULEPP_H
 
 #include <any>
+#include <atomic>
 #include <map>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <utility>
@@ -37,86 +39,179 @@ SOFTWARE.
 #include <fcntl.h>
 #include <dlfcn.h>
 #include <filesystem>
+#include <condition_variable>
 
 #define F_CREATE(T) extern "C" T* create() {return new T;}
 
-class IModule {
- protected:
-  uint32_t m_u32CycleTime_ms;
-  bool m_bRun;
-  std::string m_sError;
-  std::thread* m_pThread;
-  std::string m_sName = "IModule";
+using Path = std::filesystem::path;
+using UniqueLock = std::unique_lock<std::mutex>;
+using Clock = std::chrono::high_resolution_clock;
+using Milliseconds = std::chrono::milliseconds;
+using Nanoseconds = std::chrono::nanoseconds;
 
- public:
-  IModule(): m_u32CycleTime_ms(500), m_bRun(true), m_sError(), m_pThread(nullptr) {}
-  explicit IModule(std::string i_sName): m_u32CycleTime_ms(500), m_bRun(true), m_sError(), m_pThread(nullptr), m_sName(std::move(i_sName)) {}
+#define TIMESTAMP_MS std::chrono::duration_cast<Milliseconds>(Clock::now().time_since_epoch()).count()
+#define TIMESTAMP_NS std::chrono::duration_cast<Nanoseconds>(Clock::now().time_since_epoch()).count()
 
-  ~IModule() {
-    delete m_pThread;
+class ModuleVersion {
+  uint32_t m_u32Major = 0U;
+  uint32_t m_u32Minor = 1U;
+  uint32_t m_u32Patch = 0U;
+
+public:
+  ModuleVersion() = default;
+  ModuleVersion(const ModuleVersion& other) {
+    m_u32Major = other.m_u32Major;
+    m_u32Minor = other.m_u32Minor;
+    m_u32Patch = other.m_u32Patch;
+  }
+  ModuleVersion(uint32_t i_u32Major, uint32_t i_u32Minor, uint32_t i_u32Patch): m_u32Major(i_u32Major), m_u32Minor(i_u32Minor), m_u32Patch(i_u32Patch) {}
+
+  [[nodiscard]] std::string toString() const {
+    std::stringstream r;
+    r << std::to_string(m_u32Major) << "." << std::to_string(m_u32Minor) << "." << std::to_string(m_u32Patch);
+    return r.str();
+  }
+};
+
+class ModuleInformation {
+  ModuleVersion m_Version {0U, 1U, 0U};
+  std::string m_sName;
+
+public:
+  ModuleInformation() = default;
+  explicit ModuleInformation(std::string i_sName): m_sName(std::move(i_sName)) {};
+  ModuleInformation(std::string i_sName, const ModuleVersion& i_Version): m_sName(std::move(i_sName)), m_Version(i_Version) {};
+
+  [[nodiscard]] std::string toString() const {
+    std::stringstream r;
+    r << m_sName << " " << m_Version.toString();
+    return r.str();
   };
 
+  [[nodiscard]] ModuleVersion getVersion() const {
+    return m_Version;
+  };
+
+  [[nodiscard]] std::string getName() const {
+    return m_sName;
+  }
+};
+
+class IModule {
+ private:
+  uint32_t m_u32CycleTime_ms = 500U;
+  std::atomic_bool m_bRun = {false};
+  std::atomic_bool m_bEnable = {false};
+  std::atomic_bool m_bWorkTooExpensive = {false};
+  std::string m_sError;
+  std::thread m_Thread;
+  std::mutex m_Mutex;
+  std::condition_variable m_Condition;
+  ModuleInformation m_Information;
+  uint64_t m_u64FunctionStartTimestamp = 0;
+  uint64_t m_u64FunctionEndTimestamp = 0;
+  uint64_t m_u64FunctionTime = 0;
+  uint32_t m_u32ModifiedInterval = 0;
+
+ public:
+  IModule(): m_Thread([this] {run();}), m_Information() {};
+  explicit IModule(ModuleInformation i_Information): m_Thread([this] {run();}), m_Information(std::move(i_Information)) {};
+
   bool start() {
-    if (m_pThread != nullptr) {
+    if(m_bEnable) {
       return false;
     }
-    m_pThread = new std::thread([this]() {
-      run();
-    });
+    m_bRun = true;
+    m_bEnable = true;
+    m_Condition.notify_one();
     return true;
+  };
+
+  void stop() {
+    m_bEnable = false;
+    m_Condition.notify_one();
+  };
+
+  void kill() {
+    m_bRun = false;
+    m_bEnable = false;
+    m_Condition.notify_one();
   }
 
   bool join() {
-    if (m_pThread == nullptr) {
-      return false;
+    bool r = false;
+    if(m_Thread.joinable()) {
+      m_Thread.join();
+      r = true;
     }
-    m_pThread->join();
-    return true;
-  }
+    return r;
+  };
 
-  virtual void run() {
-    onStart();
-    while (m_bRun) {
-      work();
+  void _waitUntilEnabled() {
+    UniqueLock lg(m_Mutex);
+    m_Condition.wait(lg, [this]{ return m_bEnable || !m_bRun; });
+  };
+
+  void _timeWork() {
+    m_u64FunctionStartTimestamp = TIMESTAMP_MS;
+    work();
+    m_u64FunctionEndTimestamp = TIMESTAMP_MS;
+    m_u64FunctionTime = m_u64FunctionEndTimestamp - m_u64FunctionStartTimestamp;
+    if(m_u64FunctionTime > m_u32CycleTime_ms) {
+      m_bWorkTooExpensive = true;
+      m_u32ModifiedInterval = 0;
+    } else {
+      m_bWorkTooExpensive = false;
+      m_u32ModifiedInterval = m_u32CycleTime_ms - m_u64FunctionTime;
+    }
+  };
+
+  void run() {
+    while(!m_bRun) {
       std::this_thread::sleep_for(std::chrono::milliseconds(m_u32CycleTime_ms));
     }
-    onStop();
-  }
+    onStart();
+    while(m_bRun) {
+      _waitUntilEnabled();
 
-  virtual void work() {}
-  virtual void onStart() {}
-  virtual void onStop() {}
-
-  virtual bool stop() {
-    if (m_pThread == nullptr) {
-      return false;
+      while(m_bEnable) {
+        _timeWork();
+        std::this_thread::sleep_for(Milliseconds(m_u32CycleTime_ms));
+      }
     }
-    m_bRun = false;
-    return true;
-  }
+    onStop();
+  };
+
+  virtual void work() {};
+  virtual void onStart() {};
+  virtual void onStop() {};
 
   [[nodiscard]] bool hasError() const {
     return !m_sError.empty();
-  }
+  };
 
   [[nodiscard]] std::string getError() const {
     return m_sError;
-  }
+  };
 
   [[nodiscard]] bool isRunning() const {
     return m_bRun;
+  };
+
+  [[nodiscard]] bool isEnabled() const {
+    return m_bEnable;
   }
 
   [[nodiscard]] uint32_t getCycleTime() const {
     return m_u32CycleTime_ms;
-  }
+  };
 
   void setCycleTime(uint32_t i_u32CycleTime) {
     m_u32CycleTime_ms = i_u32CycleTime;
-  }
+  };
 
-  std::string getName() {
-    return m_sName;
+  [[nodiscard]] ModuleInformation getInformation() const {
+    return m_Information;
   }
 };
 
@@ -130,25 +225,21 @@ class ModuleLoader {
    * @return
    */
   template<typename T>
-  static T* load(const std::string& path, bool verbose = false) {
-    void* h = dlopen(std::filesystem::absolute(path).c_str(), RTLD_LAZY);
-    if (!h) {
-      if (verbose) {
-        printf("dlopen error: %s\n", dlerror());
+  static T* load(const Path& path, bool verbose = false) {
+    T* r = nullptr;
+    (void) dlerror(); // clearing any previous errors
+    if (std::filesystem::exists(path) && path.has_extension() && path.extension() == ".so") {
+      void* h = dlopen(std::filesystem::absolute(path).c_str(), RTLD_LAZY);
+      if(h != nullptr) {
+        typedef T* create_t();
+        auto* c = (create_t*) dlsym(h, "create"); // NOLINT(clion-misra-cpp2008-5-2-4)
+        auto e = dlerror();
+        if(e == nullptr) {
+          r = c();
+        }
       }
-      return nullptr;
     }
-    typedef T* create_t();
-    auto* c = (create_t*) dlsym(h, "create");
-    auto e = dlerror();
-    if (e) {
-      if (verbose) {
-        printf("dlsym error: %s\n", e);
-      }
-      dlclose(h);
-      return nullptr;
-    }
-    return c();
+    return r;
   }
 
   /*!
@@ -159,15 +250,33 @@ class ModuleLoader {
    * @return std::vector<T*>
    */
   template<typename T>
-  static std::vector<T*> loadDirectory(const std::string& path, bool verbose = false) {
+  static std::vector<T*> loadDirectory(const Path& path, bool verbose = false) {
     std::vector<T*> r;
     for (const auto& e: std::filesystem::directory_iterator(path)) {
       const auto& p = e.path();
-      if (e.is_regular_file() && p.has_extension() && p.extension() == ".so") {
-        auto *ptr = load<T>(p, verbose);
-        if(ptr != nullptr) {
-          r.push_back(ptr);
-        }
+      auto *ptr = load<T>(p, verbose);
+      if(ptr != nullptr) {
+        r.push_back(ptr);
+      }
+    }
+    return r;
+  }
+
+  /*!
+   * load all shared objects in a directory recursively
+   * @tparam T
+   * @param path
+   * @param verbose
+   * @return
+   */
+  template<typename T>
+  static std::vector<T*> loadDirectoryRecursive(const Path& path, bool verbose = false) {
+    std::vector<T*> r;
+    for (const auto& e: std::filesystem::directory_iterator(path)) {
+      const auto& p = e.path();
+      auto *ptr = load<T>(p, verbose);
+      if(ptr != nullptr) {
+        r.push_back(ptr);
       }
     }
     return r;
@@ -180,7 +289,7 @@ class ModuleLoader {
    * @return Module*
    */
   template<typename ModuleType>
-  static ModuleType* loadModule(const std::string& path, bool verbose = false) {
+  static ModuleType* loadModule(const Path& path, bool verbose = false) {
     return load<ModuleType>(path, verbose);
   }
 };
