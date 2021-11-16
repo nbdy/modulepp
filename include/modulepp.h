@@ -122,6 +122,8 @@ class IModule {
   uint64_t m_u64FunctionTime = 0;
   uint32_t m_u32ModifiedInterval = 0;
   std::vector<ModuleInformation> m_Dependencies;
+
+protected:
   std::map<std::string, IModule*> m_DependencyMap;
 
  public:
@@ -363,6 +365,18 @@ public:
   ~ModuleManager() {
     for(IModule* module : m_Modules) {
       delete module;
+    }
+  }
+
+  void start(){
+    for(IModule* module : m_Modules) {
+      module->start();
+    }
+  }
+
+  void stop() {
+    for(IModule* module : m_Modules) {
+      module->stop();
     }
   }
 

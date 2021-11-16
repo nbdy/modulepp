@@ -10,6 +10,8 @@
 class ModuleWithDependency : public IModule {
 public:
   ModuleWithDependency();
+
+  void work() override;
 };
 
 #endif // MODULEPP_MODULEWITHDEPENDENCY_MODULEWITHDEPENDENCY_H_

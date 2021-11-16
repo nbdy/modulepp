@@ -60,5 +60,7 @@ TEST(modulepp, LoadDirectory) {
 
 TEST(modulepp, ModuleManager) {
   ModuleManager mm("modules/", true, true);
-
+  mm.start();
+  std::this_thread::sleep_for(Milliseconds(2000));
+  mm.stop();
 }
