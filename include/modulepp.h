@@ -34,6 +34,11 @@ SOFTWARE.
 #endif
 
 #define ENABLE_DRAW_FUNCTIONS
+#define ENABLE_SHARED_DATA
+
+#ifdef ENABLE_SHARED_DATA
+#include "json.hpp"
+#endif
 
 #include <any>
 #include <atomic>
@@ -54,6 +59,7 @@ SOFTWARE.
 
 using Path = std::filesystem::path;
 using UniqueLock = std::unique_lock<std::mutex>;
+using LockGuard = std::lock_guard<std::mutex>;
 using Clock = std::chrono::high_resolution_clock;
 using Milliseconds = std::chrono::milliseconds;
 using Nanoseconds = std::chrono::nanoseconds;
@@ -106,6 +112,20 @@ public:
   }
 };
 
+class ModuleDependency : public ModuleInformation {
+  bool m_bOptional = false;
+
+public:
+  explicit ModuleDependency(const std::string& i_sName): ModuleInformation(i_sName) {};
+  explicit ModuleDependency(const ModuleInformation& i_Information) : ModuleInformation(i_Information) {};
+  ModuleDependency(const std::string& i_sName, bool i_bOptional): ModuleInformation(i_sName), m_bOptional(i_bOptional) {};
+  ModuleDependency(const ModuleInformation& i_Information, bool i_bOptional) : ModuleInformation(i_Information), m_bOptional(i_bOptional) {};
+
+  bool isOptional() {
+    return m_bOptional;
+  }
+};
+
 class IModule {
  private:
   uint32_t m_u32CycleTime_ms = 500U;
@@ -121,7 +141,11 @@ class IModule {
   uint64_t m_u64FunctionEndTimestamp = 0;
   uint64_t m_u64FunctionTime = 0;
   uint32_t m_u32ModifiedInterval = 0;
-  std::vector<ModuleInformation> m_Dependencies;
+  std::vector<ModuleDependency> m_Dependencies;
+#ifdef ENABLE_SHARED_DATA
+  nlohmann::json m_SharedData;
+  std::mutex m_SharedDataMutex;
+#endif
 
 protected:
   std::map<std::string, IModule*> m_DependencyMap;
@@ -129,7 +153,7 @@ protected:
  public:
   IModule(): m_Thread([this] {run();}), m_Information() {};
   explicit IModule(ModuleInformation i_Information): m_Thread([this] {run();}), m_Information(std::move(i_Information)) {};
-  IModule(ModuleInformation i_Information, std::vector<ModuleInformation> i_Dependencies): m_Thread([this] {run();}), m_Information(std::move(i_Information)), m_Dependencies(std::move(i_Dependencies)) {};
+  IModule(ModuleInformation i_Information, std::vector<ModuleDependency> i_Dependencies): m_Thread([this] {run();}), m_Information(std::move(i_Information)), m_Dependencies(std::move(i_Dependencies)) {};
 
   ~IModule() {
     kill();
@@ -208,6 +232,19 @@ protected:
   virtual void drawSettings() {};
 #endif
 
+#ifdef ENABLE_SHARED_DATA
+  template <class T>
+  void setSharedData(T *obj, void (T::*function)(nlohmann::json&)) {
+    LockGuard lg(m_SharedDataMutex);
+    std::bind(function, obj, std::placeholders::_1)(m_SharedData);
+  };
+
+  nlohmann::json getSharedData() {
+    LockGuard lg(m_SharedDataMutex);
+    return m_SharedData;
+  }
+#endif
+
   [[nodiscard]] bool hasError() const {
     return !m_sError.empty();
   };
@@ -236,7 +273,7 @@ protected:
     return m_Information;
   }
 
-  std::vector<ModuleInformation> getModuleDependencies() {
+  std::vector<ModuleDependency> getModuleDependencies() {
     return m_Dependencies;
   }
 
@@ -255,7 +292,7 @@ class ModuleLoader {
    * @return
    */
   template<typename T>
-  static T* load(const Path& path, bool verbose = false) {
+  static T* load(const Path& path, bool verbose) {
     T* r = nullptr;
     (void) dlerror(); // clearing any previous errors
     if (std::filesystem::exists(path) && path.has_extension() && path.extension() == ".so") {
@@ -265,7 +302,24 @@ class ModuleLoader {
         auto* c = (create_t*) dlsym(h, "create"); // NOLINT(clion-misra-cpp2008-5-2-4)
         auto e = dlerror();
         if(e == nullptr) {
+          if(verbose) {
+#ifdef USE_OHLOG
+            DLOGA("Loaded module '%s'", path.c_str());
+#else
+            std::cout << "Loaded module '" << path.c_str() << "'" << std::endl;
+#endif
+          }
           r = c();
+        } else {
+          if(verbose) {
+#ifdef USE_OHLOG
+            WLOGA("Could not load module: %s", path.c_str());
+            WLOGA("\tError: %s", e);
+#else
+            std::cout << "Could not load module: " << path.c_str() << std::endl;
+            std::cout << "\tError: " << e << std::endl;
+#endif
+          }
         }
       }
     }
@@ -280,7 +334,7 @@ class ModuleLoader {
    * @return std::vector<T*>
    */
   template<typename T>
-  static std::vector<T*> loadDirectory(const Path& path, bool verbose = false) {
+  static std::vector<T*> loadDirectory(const Path& path, bool verbose) {
     std::vector<T*> r;
     for (const auto& e: std::filesystem::directory_iterator(path)) {
       const auto& p = e.path();
@@ -300,7 +354,7 @@ class ModuleLoader {
    * @return
    */
   template<typename T>
-  static std::vector<T*> loadDirectoryRecursive(const Path& path, bool verbose = false) {
+  static std::vector<T*> loadDirectoryRecursive(const Path& path, bool verbose) {
     std::vector<T*> r;
     for (const auto& e: std::filesystem::recursive_directory_iterator(path)) {
       const auto& p = e.path();
@@ -319,7 +373,7 @@ class ModuleLoader {
    * @return Module*
    */
   template<typename ModuleType>
-  static ModuleType* loadModule(const Path& path, bool verbose = false) {
+  static ModuleType* loadModule(const Path& path, bool verbose) {
     return load<ModuleType>(path, verbose);
   }
 };
@@ -352,14 +406,29 @@ class ModuleManager {
     }
   }
 
-public:
-  explicit ModuleManager(const std::filesystem::path& i_Path, bool i_bRecursive = false, bool i_bVerbose = false) {
+  void init(const std::filesystem::path& i_Path, bool i_bRecursive, bool i_bVerbose) {
     if(i_bRecursive) {
       m_Modules = ModuleLoader::loadDirectoryRecursive<IModule>(i_Path, i_bVerbose);
     } else {
       m_Modules = ModuleLoader::loadDirectory<IModule>(i_Path, i_bVerbose);
     }
+#ifdef USE_OHLOG
+    DLOGA("Loaded %i modules", m_Modules.size());
+#endif
     resolveModuleDependencies();
+  }
+
+public:
+  explicit ModuleManager(const std::filesystem::path& i_Path) {
+    init(i_Path, false, false);
+  }
+
+  ModuleManager(const std::filesystem::path& i_Path, bool i_bRecursive) {
+    init(i_Path, i_bRecursive, false);
+  }
+
+  ModuleManager(const std::filesystem::path& i_Path, bool i_bRecursive, bool i_bVerbose) {
+    init(i_Path, i_bRecursive, i_bVerbose);
   }
 
   ~ModuleManager() {
@@ -392,14 +461,6 @@ public:
     return m_Modules.size();
   }
 
-  IModule* getVisibleModule() {
-    return m_Modules[m_u32VisibleModule];
-  }
-
-  void setModuleVisible(uint32_t i_u32ModuleIndex) {
-    m_u32VisibleModule = i_u32ModuleIndex;
-  }
-
   IModule* getModuleByInformation(const ModuleInformation& i_Information) {
     for(IModule* module : m_Modules) {
       if(module->getInformation().toString() == i_Information.toString()) {
@@ -417,6 +478,16 @@ public:
     }
     return nullptr;
   }
+
+#ifdef ENABLE_DRAW_FUNCTIONS
+  IModule* getVisibleModule() {
+    return m_Modules[m_u32VisibleModule];
+  }
+
+  void setModuleVisible(uint32_t i_u32ModuleIndex) {
+    m_u32VisibleModule = i_u32ModuleIndex;
+  }
+#endif
 };
 
 #endif //LIBMODULEPP_MODULEPP_H

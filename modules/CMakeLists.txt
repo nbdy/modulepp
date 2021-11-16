@@ -1,3 +1,5 @@
 add_subdirectory(BadModule)
 add_subdirectory(TestModule)
 add_subdirectory(ModuleWithDependency)
+add_subdirectory(GPS)
+add_subdirectory(GPSDataUser)

@@ -10,7 +10,7 @@
   - [X] module interface / baseline
   - [X] module manager
   - [X] module dependency resolver
-
+  - [X] optional shared json data
   - [X] 100% test coverage
 
 ## example
