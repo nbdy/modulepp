@@ -5,7 +5,7 @@
 #ifndef MODULEPP_BADMODULE_BADMODULE_H_
 #define MODULEPP_BADMODULE_BADMODULE_H_
 
-#include "../modulepp.h"
+#include "modulepp.h"
 
 class BadModule : public IModule {
  public:

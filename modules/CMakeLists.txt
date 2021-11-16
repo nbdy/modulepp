@@ -1,0 +1,3 @@
+add_subdirectory(BadModule)
+add_subdirectory(TestModule)
+add_subdirectory(ModuleWithDependency)

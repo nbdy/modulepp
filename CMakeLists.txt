@@ -2,16 +2,19 @@ cmake_minimum_required(VERSION 3.17)
 project(modulepp)
 
 option(TESTS "Enable tests" OFF)
+option(MODULES "Build modules" ON)
 
 set(CMAKE_CXX_STANDARD 17)
 
-add_library(modulepp SHARED modulepp.h)
+add_library(modulepp SHARED include/modulepp.h)
 set_target_properties(modulepp PROPERTIES LINKER_LANGUAGE CXX)
 target_link_libraries(modulepp dl pthread)
 
-add_library(moduleppstatic SHARED modulepp.h)
+add_library(moduleppstatic SHARED include/modulepp.h)
 set_target_properties(moduleppstatic PROPERTIES LINKER_LANGUAGE CXX)
 target_link_libraries(moduleppstatic dl pthread)
+
+include_directories(include)
 
 if(TESTS)
     include(FetchContent)
@@ -28,12 +31,8 @@ if(TESTS)
     target_link_libraries(modulepp_tests dl gtest_main)
     include(GoogleTest)
     gtest_discover_tests(modulepp_tests)
+endif()
 
-    add_library(test_module SHARED modulepp.h TestModule/TestModule.h TestModule/TestModule.cpp)
-    set_target_properties(test_module PROPERTIES LINKER_LANGUAGE CXX)
-    target_link_libraries(test_module dl pthread)
-
-    add_library(test_badmodule SHARED modulepp.h BadModule/BadModule.h BadModule/BadModule.cpp)
-    set_target_properties(test_badmodule PROPERTIES LINKER_LANGUAGE CXX)
-    target_link_libraries(test_badmodule dl pthread)
+if(MODULES)
+    add_subdirectory(modules)
 endif()

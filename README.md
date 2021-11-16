@@ -8,6 +8,8 @@
     - [X] load single shared object
     - [X] load whole directory of shared objects
   - [X] module interface / baseline
+  - [X] module manager
+  - [X] module dependency resolver
 
   - [X] 100% test coverage
 

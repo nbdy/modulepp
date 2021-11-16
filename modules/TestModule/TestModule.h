@@ -5,7 +5,7 @@
 #ifndef MODULEPP_TESTMODULE_TESTMODULE_H_
 #define MODULEPP_TESTMODULE_TESTMODULE_H_
 
-#include "../modulepp.h"
+#include "modulepp.h"
 
 class TestModule : public IModule {
  private:

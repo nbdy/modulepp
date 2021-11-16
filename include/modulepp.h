@@ -27,6 +27,14 @@ SOFTWARE.
 #ifndef LIBMODULEPP_MODULEPP_H
 #define LIBMODULEPP_MODULEPP_H
 
+#define USE_OHLOG
+
+#ifdef USE_OHLOG
+#include "ohlog.h"
+#endif
+
+#define ENABLE_DRAW_FUNCTIONS
+
 #include <any>
 #include <atomic>
 #include <map>
@@ -39,6 +47,7 @@ SOFTWARE.
 #include <fcntl.h>
 #include <dlfcn.h>
 #include <filesystem>
+#include <sstream>
 #include <condition_variable>
 
 #define F_CREATE(T) extern "C" T* create() {return new T;}
@@ -100,7 +109,7 @@ public:
 class IModule {
  private:
   uint32_t m_u32CycleTime_ms = 500U;
-  std::atomic_bool m_bRun = {false};
+  std::atomic_bool m_bRun = {true};
   std::atomic_bool m_bEnable = {false};
   std::atomic_bool m_bWorkTooExpensive = {false};
   std::string m_sError;
@@ -112,10 +121,18 @@ class IModule {
   uint64_t m_u64FunctionEndTimestamp = 0;
   uint64_t m_u64FunctionTime = 0;
   uint32_t m_u32ModifiedInterval = 0;
+  std::vector<ModuleInformation> m_Dependencies;
+  std::map<std::string, IModule*> m_DependencyMap;
 
  public:
   IModule(): m_Thread([this] {run();}), m_Information() {};
   explicit IModule(ModuleInformation i_Information): m_Thread([this] {run();}), m_Information(std::move(i_Information)) {};
+  IModule(ModuleInformation i_Information, std::vector<ModuleInformation> i_Dependencies): m_Thread([this] {run();}), m_Information(std::move(i_Information)), m_Dependencies(std::move(i_Dependencies)) {};
+
+  ~IModule() {
+    kill();
+    join();
+  }
 
   bool start() {
     if(m_bEnable) {
@@ -167,9 +184,7 @@ class IModule {
   };
 
   void run() {
-    while(!m_bRun) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(m_u32CycleTime_ms));
-    }
+    _waitUntilEnabled();
     onStart();
     while(m_bRun) {
       _waitUntilEnabled();
@@ -185,6 +200,11 @@ class IModule {
   virtual void work() {};
   virtual void onStart() {};
   virtual void onStop() {};
+
+#ifdef ENABLE_DRAW_FUNCTIONS
+  virtual void draw() {};
+  virtual void drawSettings() {};
+#endif
 
   [[nodiscard]] bool hasError() const {
     return !m_sError.empty();
@@ -212,6 +232,14 @@ class IModule {
 
   [[nodiscard]] ModuleInformation getInformation() const {
     return m_Information;
+  }
+
+  std::vector<ModuleInformation> getModuleDependencies() {
+    return m_Dependencies;
+  }
+
+  void setDependency(const std::string& i_sName, IModule* i_pModule) {
+    m_DependencyMap[i_sName] = i_pModule;
   }
 };
 
@@ -291,6 +319,89 @@ class ModuleLoader {
   template<typename ModuleType>
   static ModuleType* loadModule(const Path& path, bool verbose = false) {
     return load<ModuleType>(path, verbose);
+  }
+};
+
+class ModuleManager {
+  std::vector<IModule*> m_Modules;
+#ifdef ENABLE_DRAW_FUNCTIONS
+  std::atomic_uint32_t m_u32VisibleModule = 0;
+#endif
+
+  void resolveModuleDependencies() {
+    for(IModule* module : m_Modules) {
+      auto moduleDependencies = module->getModuleDependencies();
+#ifdef USE_OHLOG
+      if(!moduleDependencies.empty()) {
+        DLOGA("Loading %i dependencies for module '%s'", moduleDependencies.size(), module->getInformation().toString().c_str());
+      }
+#endif
+      for(const auto& dependency : moduleDependencies){
+        IModule *dep = getModuleByInformation(dependency);
+        if(dep != nullptr) {
+          module->setDependency(dependency.getName(), dep);
+        }
+#ifdef USE_OHLOG
+        else {
+          WLOGA("Failed to find dependency '%s' for module '%s", dependency.toString().c_str(), module->getInformation().toString().c_str());
+        }
+#endif
+      }
+    }
+  }
+
+public:
+  explicit ModuleManager(const std::filesystem::path& i_Path, bool i_bRecursive = false, bool i_bVerbose = false) {
+    if(i_bRecursive) {
+      m_Modules = ModuleLoader::loadDirectoryRecursive<IModule>(i_Path, i_bVerbose);
+    } else {
+      m_Modules = ModuleLoader::loadDirectory<IModule>(i_Path, i_bVerbose);
+    }
+    resolveModuleDependencies();
+  }
+
+  ~ModuleManager() {
+    for(IModule* module : m_Modules) {
+      delete module;
+    }
+  }
+
+  std::string getModuleNames() {
+    std::stringstream r;
+    for(IModule* m : m_Modules) {
+      r << m->getInformation().getName() << ";";
+    }
+    return r.str();
+  }
+
+  uint32_t getModuleCount() {
+    return m_Modules.size();
+  }
+
+  IModule* getVisibleModule() {
+    return m_Modules[m_u32VisibleModule];
+  }
+
+  void setModuleVisible(uint32_t i_u32ModuleIndex) {
+    m_u32VisibleModule = i_u32ModuleIndex;
+  }
+
+  IModule* getModuleByInformation(const ModuleInformation& i_Information) {
+    for(IModule* module : m_Modules) {
+      if(module->getInformation().toString() == i_Information.toString()) {
+        return module;
+      }
+    }
+    return nullptr;
+  }
+
+  IModule* getModuleByName(const std::string& i_sName) {
+    for(IModule* module : m_Modules) {
+      if(module->getInformation().getName() == i_sName) {
+        return module;
+      }
+    }
+    return nullptr;
   }
 };
 

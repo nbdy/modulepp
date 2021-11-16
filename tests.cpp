@@ -4,8 +4,8 @@
 
 #include "gtest/gtest.h"
 #include "modulepp.h"
-#include "TestModule/TestModule.h"
-#include "BadModule/BadModule.h"
+#include "modules/TestModule/TestModule.h"
+#include "modules/BadModule/BadModule.h"
 
 #define TEST_LIBRARY_PATH "libtest_module.so"
 #define NON_EXISTENT_LIBRARY_PATH "/tmp/thislibraryprobablydoesnotexist.so"
@@ -56,4 +56,9 @@ TEST(modulepp, LoadDirectory) {
   */
   EXPECT_EQ(modules.size(), 1);
   EXPECT_EQ(modules[0]->getInformation().getName(), "TestModule");
+}
+
+TEST(modulepp, ModuleManager) {
+  ModuleManager mm("modules/", true, true);
+
 }

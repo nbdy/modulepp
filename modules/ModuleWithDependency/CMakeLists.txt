@@ -1,0 +1,3 @@
+add_library(ModuleWithDependency SHARED ModuleWithDependency.cpp)
+set_target_properties(ModuleWithDependency PROPERTIES LINKER_LANGUAGE CXX)
+target_link_libraries(ModuleWithDependency dl pthread)
