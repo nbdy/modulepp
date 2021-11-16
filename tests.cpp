@@ -7,7 +7,7 @@
 #include "modules/TestModule/TestModule.h"
 #include "modules/BadModule/BadModule.h"
 
-#define TEST_LIBRARY_PATH "libtest_module.so"
+#define TEST_LIBRARY_PATH "modules/TestModule/libTestModule.so"
 #define NON_EXISTENT_LIBRARY_PATH "/tmp/thislibraryprobablydoesnotexist.so"
 #define BAD_MODULE_LIBRARY_PATH "libtest_badmodule.so"
 
@@ -38,14 +38,13 @@ TEST(modulepp, LoadNotExistentLibrary) {
 }
 
 TEST(modulepp, LoadBadModule) {
-  EXPECT_TRUE(std::filesystem::exists(BAD_MODULE_LIBRARY_PATH));
+  EXPECT_FALSE(std::filesystem::exists(BAD_MODULE_LIBRARY_PATH));
   auto* m = ModuleLoader::loadModule<BadModule>(BAD_MODULE_LIBRARY_PATH, true);
   EXPECT_EQ(m, nullptr);
 }
 
 TEST(modulepp, LoadDirectory) {
-  auto cwd = std::filesystem::current_path();
-  std::cout << cwd << std::endl;
+  auto cwd = std::filesystem::current_path() / "modules" / "TestModule";
   auto modules = ModuleLoader::loadDirectory<TestModule>(cwd, true);
 /*
   for(auto module : modules) {
