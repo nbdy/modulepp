@@ -43,7 +43,7 @@ class TestModule : public IModule {
 // TestModule.cpp
 #include "TestModule.h"
 
-TestModule::TestModule(): IModule("TestModule") {}
+TestModule::TestModule(): IModule(ModuleInformation("TestModule")) {}
 
 void TestModule::work() {
   m_u32Counter += 1;

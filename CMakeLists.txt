@@ -1,8 +1,9 @@
 cmake_minimum_required(VERSION 3.17)
-project(modulepp)
+project(modulepp VERSION 1.3)
 
-option(TESTS "Enable tests" OFF)
-option(MODULES "Build modules" ON)
+option(TESTS "Enable tests" ON)
+option(MODULES "Build modules" OFF)
+option(README "Build readme example" ON)
 
 set(CMAKE_CXX_STANDARD 17)
 
@@ -26,11 +27,27 @@ if(TESTS)
     FetchContent_MakeAvailable(googletest)
     enable_testing()
 
-    add_executable(modulepp_tests tests.cpp)
-    target_compile_definitions(modulepp_tests PRIVATE -DTESTS)
-    target_link_libraries(modulepp_tests dl gtest_main)
+    add_executable(ModuleVersionTests tests/ModuleVersionTests.cpp)
+    target_link_libraries(ModuleVersionTests dl gtest_main)
+
+    add_executable(ModuleInformationTests tests/ModuleInformationTests.cpp)
+    target_link_libraries(ModuleInformationTests dl gtest_main)
+
+    add_executable(ModuleDependencyTests tests/ModuleDependencyTests.cpp)
+    target_link_libraries(ModuleDependencyTests dl gtest_main)
+
     include(GoogleTest)
-    gtest_discover_tests(modulepp_tests)
+
+    gtest_discover_tests(ModuleVersionTests)
+    gtest_discover_tests(ModuleInformationTests)
+    gtest_discover_tests(ModuleDependencyTests)
+endif()
+
+if(README)
+    add_executable(ReadMe tests/ReadMe.cpp)
+    target_link_libraries(ReadMe dl gtest_main)
+    add_subdirectory(modules/TestModule)
+    add_dependencies(ReadMe TestModule)
 endif()
 
 if(MODULES)

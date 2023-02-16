@@ -86,6 +86,14 @@ public:
     r << std::to_string(m_u32Major) << "." << std::to_string(m_u32Minor) << "." << std::to_string(m_u32Patch);
     return r.str();
   }
+
+  bool operator==(const ModuleVersion& i_Version) const {
+      return m_u32Major == i_Version.m_u32Major && m_u32Minor == i_Version.m_u32Minor && m_u32Patch == i_Version.m_u32Patch;
+  }
+
+  bool operator!=(const ModuleVersion& i_Version) const {
+      return !(i_Version == *this);
+  }
 };
 
 class ModuleInformation {
@@ -110,6 +118,14 @@ public:
   [[nodiscard]] std::string getName() const {
     return m_sName;
   }
+
+  bool operator==(const ModuleInformation& i_Information) const {
+      return m_sName == i_Information.getName() && m_Version == i_Information.getVersion();
+  }
+
+  bool operator!=(const ModuleInformation& i_Information) const {
+      return !(i_Information == *this);
+  }
 };
 
 class ModuleDependency : public ModuleInformation {
@@ -121,7 +137,7 @@ public:
   ModuleDependency(const std::string& i_sName, bool i_bOptional): ModuleInformation(i_sName), m_bOptional(i_bOptional) {};
   ModuleDependency(const ModuleInformation& i_Information, bool i_bOptional) : ModuleInformation(i_Information), m_bOptional(i_bOptional) {};
 
-  bool isOptional() {
+  [[nodiscard]] bool isOptional() const {
     return m_bOptional;
   }
 };
@@ -149,6 +165,14 @@ class IModule {
 
 protected:
   std::map<std::string, IModule*> m_DependencyMap;
+
+    static void sleep(std::chrono::milliseconds i_Timeout) {
+        std::this_thread::sleep_for(i_Timeout);
+    }
+
+    static void sleep(uint32_t i_Milliseconds) {
+        sleep(std::chrono::milliseconds(i_Milliseconds));
+    }
 
  public:
   IModule(): m_Thread([this] {run();}), m_Information() {};
